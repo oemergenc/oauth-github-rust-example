@@ -1,76 +1,59 @@
-//!
-//! This example showcases the Github OAuth2 process for requesting access to the user's public repos and
-//! email address.
-//!
-//! Before running it, you'll need to generate your own Github OAuth2 credentials.
-//!
-//! In order to run the example call:
-//!
-//! ```sh
-//! GITHUB_CLIENT_ID=xxx GITHUB_CLIENT_SECRET=yyy cargo run --example github
-//! ```
-//!
-//! ...and follow the instructions.
-//!
-
-use oauth2::basic::BasicClient;
-
-// Alternatively, this can be `oauth2::curl::http_client` or a custom client.
-use oauth2::reqwest::http_client;
-use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
-    TokenResponse, TokenUrl,
-};
 use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
+
+use reqwest::{Client, Error, Request, Response};
+use serde::Deserialize;
+use serde::Serialize;
 use url::Url;
 
+#[derive(Serialize)]
+struct QueryParams {
+    pub client_id: String,
+    pub redirect_uri: String,
+}
+
+#[derive(Serialize)]
+struct AccessTokenQueryParams {
+    pub client_id: String,
+    pub client_secret: String,
+    pub code: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AccessTokenResponse {
+    pub token_type: String,
+    pub access_token: String,
+    pub expires_in: f64,
+    pub refresh_token: String,
+}
+
 fn main() {
-    let github_client_id = ClientId::new(
-        env::var("GITHUB_CLIENT_ID").expect("Missing the GITHUB_CLIENT_ID environment variable."),
-    );
-    let github_client_secret = ClientSecret::new(
-        env::var("GITHUB_CLIENT_SECRET")
-            .expect("Missing the GITHUB_CLIENT_SECRET environment variable."),
-    );
-    let auth_url = AuthUrl::new("https://github.com/login/oauth/authorize".to_string())
-        .expect("Invalid authorization endpoint URL");
-    let token_url = TokenUrl::new("https://github.com/login/oauth/access_token".to_string())
-        .expect("Invalid token endpoint URL");
+    let github_client_id = env::var("GITHUB_CLIENT_ID").expect("Missing the GITHUB_CLIENT_ID environment variable.");
+    let github_client_secret = env::var("GITHUB_CLIENT_SECRET").expect("Missing the GITHUB_CLIENT_SECRET environment variable.");
+    let auth_url = "https://github.com/login/oauth/authorize";
+    let token_url = "https://github.com/login/oauth/access_token";
 
-    // Set up the config for the Github OAuth2 process.
-    let client = BasicClient::new(
-        github_client_id,
-        Some(github_client_secret),
-        auth_url,
-        Some(token_url),
-    );
-        // This example will be running its own server at localhost:8080.
-        // See below for the server implementation.
-        // .set_redirect_uri(
-        //     RedirectUrl::new("http://localhost:8080".to_string()).expect("Invalid redirect URL"),
-        // );
+    let query_params = QueryParams {
+        client_id: github_client_id.clone(),
+        redirect_uri: "http://localhost:3000/oauth2callback".to_string(),
+    };
 
-    // Generate the authorization URL to which we'll redirect the user.
-    let (authorize_url, csrf_state) = client
-        .authorize_url(CsrfToken::new_random)
-        // This example is requesting access to the user's public repos and email.
-        .add_scope(Scope::new("public_repo".to_string()))
-        .add_scope(Scope::new("user:email".to_string()))
-        .url();
+    // let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
 
-    println!(
-        "Open this URL in your browser:\n{}\n",
-        authorize_url.to_string()
-    );
+    let result = client
+        .get(auth_url)
+        .query(&query_params)
+        .build()
+        .unwrap();
 
-    // A very naive implementation of the redirect server.
+    println!("OPEN THIS LINK: {:?}", result.url().to_string());
+
     let listener = TcpListener::bind("127.0.0.1:3000").unwrap();
     for stream in listener.incoming() {
         if let Ok(mut stream) = stream {
             let code;
-            let state;
             {
                 let mut reader = BufReader::new(&stream);
 
@@ -79,6 +62,8 @@ fn main() {
 
                 let redirect_url = request_line.split_whitespace().nth(1).unwrap();
                 let url = Url::parse(&("http://localhost".to_string() + redirect_url)).unwrap();
+
+                println!("url: {:?}", url.to_string());
 
                 let code_pair = url
                     .query_pairs()
@@ -89,18 +74,7 @@ fn main() {
                     .unwrap();
 
                 let (_, value) = code_pair;
-                code = AuthorizationCode::new(value.into_owned());
-
-                let state_pair = url
-                    .query_pairs()
-                    .find(|pair| {
-                        let &(ref key, _) = pair;
-                        key == "state"
-                    })
-                    .unwrap();
-
-                let (_, value) = state_pair;
-                state = CsrfToken::new(value.into_owned());
+                code = value.into_owned();
             }
 
             let message = "Go back to your terminal :)";
@@ -111,36 +85,37 @@ fn main() {
             );
             stream.write_all(response.as_bytes()).unwrap();
 
-            println!("Github returned the following code:\n{}\n", code.secret());
-            println!(
-                "Github returned the following state:\n{} (expected `{}`)\n",
-                state.secret(),
-                csrf_state.secret()
-            );
+            println!("Github returned the following code:\n{}\n", code);
 
-            // Exchange the code with a token.
-            let token_res = client.exchange_code(code).request(http_client);
+            let token_url_with_params = Url::parse_with_params(token_url, &[("client_id", github_client_id.clone()),
+                ("client_secret", github_client_secret.clone()),
+                ("code", code.clone())
+            ]).unwrap().to_string();
 
-            println!("Github returned the following token:\n{:?}\n", token_res);
+            println!("token_url_with_params:\n{}\n", token_url_with_params);
 
-            if let Ok(token) = token_res {
-                // NB: Github returns a single comma-separated "scope" parameter instead of multiple
-                // space-separated scopes. Github-specific clients can parse this scope into
-                // multiple scopes by splitting at the commas. Note that it's not safe for the
-                // library to do this by default because RFC 6749 allows scopes to contain commas.
-                let scopes = if let Some(scopes_vec) = token.scopes() {
-                    scopes_vec
-                        .iter()
-                        .map(|comma_separated| comma_separated.split(','))
-                        .flatten()
-                        .collect::<Vec<_>>()
-                } else {
-                    Vec::new()
-                };
-                println!("Github returned the following scopes:\n{:?}\n", scopes);
-            }
+            let token_result = client
+                .post(token_url_with_params)
+                .send()
+                .unwrap()
+                .text()
+                .unwrap();
 
-            // The server will terminate itself after collecting the first code.
+            println!("token_result:\n{}\n", token_result);
+
+            //
+            // if let Ok(token) = token_res {
+            //     let scopes = if let Some(scopes_vec) = token.scopes() {
+            //         scopes_vec
+            //             .iter()
+            //             .map(|comma_separated| comma_separated.split(','))
+            //             .flatten()
+            //             .collect::<Vec<_>>()
+            //     } else {
+            //         Vec::new()
+            //     };
+            //     println!("Github returned the following scopes:\n{:?}\n", scopes);
+            // }
             break;
         }
     }
