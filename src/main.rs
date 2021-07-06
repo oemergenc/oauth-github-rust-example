@@ -20,17 +20,11 @@ struct AccessTokenQueryParams {
     pub code: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AccessTokenResponse {
-    pub token_type: String,
-    pub access_token: String,
-    pub expires_in: f64,
-    pub refresh_token: String,
-}
-
 fn main() {
-    let github_client_id = env::var("GITHUB_CLIENT_ID").expect("Missing the GITHUB_CLIENT_ID environment variable.");
-    let github_client_secret = env::var("GITHUB_CLIENT_SECRET").expect("Missing the GITHUB_CLIENT_SECRET environment variable.");
+    let github_client_id =
+        env::var("GITHUB_CLIENT_ID").expect("Missing the GITHUB_CLIENT_ID environment variable.");
+    let github_client_secret = env::var("GITHUB_CLIENT_SECRET")
+        .expect("Missing the GITHUB_CLIENT_SECRET environment variable.");
     let auth_url = "https://github.com/login/oauth/authorize";
     let token_url = "https://github.com/login/oauth/access_token";
 
@@ -42,11 +36,7 @@ fn main() {
     // let client = reqwest::Client::new();
     let client = reqwest::blocking::Client::new();
 
-    let result = client
-        .get(auth_url)
-        .query(&query_params)
-        .build()
-        .unwrap();
+    let result = client.get(auth_url).query(&query_params).build().unwrap();
 
     println!("OPEN THIS LINK: {:?}", result.url().to_string());
 
@@ -87,10 +77,16 @@ fn main() {
 
             println!("Github returned the following code:\n{}\n", code);
 
-            let token_url_with_params = Url::parse_with_params(token_url, &[("client_id", github_client_id.clone()),
-                ("client_secret", github_client_secret.clone()),
-                ("code", code.clone())
-            ]).unwrap().to_string();
+            let token_url_with_params = Url::parse_with_params(
+                token_url,
+                &[
+                    ("client_id", github_client_id.clone()),
+                    ("client_secret", github_client_secret.clone()),
+                    ("code", code.clone()),
+                ],
+            )
+            .unwrap()
+            .to_string();
 
             println!("token_url_with_params:\n{}\n", token_url_with_params);
 
@@ -102,20 +98,6 @@ fn main() {
                 .unwrap();
 
             println!("token_result:\n{}\n", token_result);
-
-            //
-            // if let Ok(token) = token_res {
-            //     let scopes = if let Some(scopes_vec) = token.scopes() {
-            //         scopes_vec
-            //             .iter()
-            //             .map(|comma_separated| comma_separated.split(','))
-            //             .flatten()
-            //             .collect::<Vec<_>>()
-            //     } else {
-            //         Vec::new()
-            //     };
-            //     println!("Github returned the following scopes:\n{:?}\n", scopes);
-            // }
             break;
         }
     }
