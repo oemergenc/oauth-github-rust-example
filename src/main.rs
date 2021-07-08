@@ -2,8 +2,6 @@ use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
-use reqwest::{Client, Error, Request, Response};
-use serde::Deserialize;
 use serde::Serialize;
 use url::Url;
 
@@ -33,7 +31,6 @@ fn main() {
         redirect_uri: "http://localhost:3000/oauth2callback".to_string(),
     };
 
-    // let client = reqwest::Client::new();
     let client = reqwest::blocking::Client::new();
 
     let result = client.get(auth_url).query(&query_params).build().unwrap();
@@ -85,8 +82,8 @@ fn main() {
                     ("code", code.clone()),
                 ],
             )
-            .unwrap()
-            .to_string();
+                .unwrap()
+                .to_string();
 
             println!("token_url_with_params:\n{}\n", token_url_with_params);
 
