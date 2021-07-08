@@ -6,7 +6,7 @@ use serde::Serialize;
 use url::Url;
 
 #[derive(Serialize)]
-struct QueryParams {
+struct AuthorizationQueryParams {
     pub client_id: String,
     pub redirect_uri: String,
 }
@@ -18,24 +18,25 @@ struct AccessTokenQueryParams {
     pub code: String,
 }
 
+const AUTHORIZATION_URL: &str = "https://github.com/login/oauth/authorize";
+const TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+
 fn main() {
     let github_client_id =
         env::var("GITHUB_CLIENT_ID").expect("Missing the GITHUB_CLIENT_ID environment variable.");
     let github_client_secret = env::var("GITHUB_CLIENT_SECRET")
         .expect("Missing the GITHUB_CLIENT_SECRET environment variable.");
-    let auth_url = "https://github.com/login/oauth/authorize";
-    let token_url = "https://github.com/login/oauth/access_token";
 
-    let query_params = QueryParams {
+    let auth_query_params = AuthorizationQueryParams {
         client_id: github_client_id.clone(),
         redirect_uri: "http://localhost:3000/oauth2callback".to_string(),
     };
 
     let client = reqwest::blocking::Client::new();
 
-    let result = client.get(auth_url).query(&query_params).build().unwrap();
+    let authorization_result = client.get(AUTHORIZATION_URL).query(&auth_query_params).build().unwrap();
 
-    println!("OPEN THIS LINK: {:?}", result.url().to_string());
+    println!("OPEN THIS LINK: {:?}\n", authorization_result.url().to_string());
 
     let listener = TcpListener::bind("127.0.0.1:3000").unwrap();
     for stream in listener.incoming() {
@@ -49,8 +50,6 @@ fn main() {
 
                 let redirect_url = request_line.split_whitespace().nth(1).unwrap();
                 let url = Url::parse(&("http://localhost".to_string() + redirect_url)).unwrap();
-
-                println!("url: {:?}", url.to_string());
 
                 let code_pair = url
                     .query_pairs()
@@ -75,7 +74,7 @@ fn main() {
             println!("Github returned the following code:\n{}\n", code);
 
             let token_url_with_params = Url::parse_with_params(
-                token_url,
+                TOKEN_URL,
                 &[
                     ("client_id", github_client_id.clone()),
                     ("client_secret", github_client_secret.clone()),
@@ -85,8 +84,6 @@ fn main() {
                 .unwrap()
                 .to_string();
 
-            println!("token_url_with_params:\n{}\n", token_url_with_params);
-
             let token_result = client
                 .post(token_url_with_params)
                 .send()
@@ -94,7 +91,7 @@ fn main() {
                 .text()
                 .unwrap();
 
-            println!("token_result:\n{}\n", token_result);
+            println!("This is your access token:\n{}\n", token_result);
             break;
         }
     }

@@ -1,4 +1,4 @@
-# OAuth exmaple workflow implemented in rust
+# OAuth example workflow implemented in rust using github
 
 ## Prerequisites
 
@@ -22,9 +22,9 @@ You also need to setup a github oauth application. This can be done on the follo
 ## Getting started
 
 ```
-git clone url
+git clone git@github.com:oemergenc/oauth-github-rust-example.git
 cd oauth-github-rust-example
-export GITHUB_CLIENT_ID=$YOUR_CLIENT_ID;export GITHUB_CLIENT_SECRET=$YOUR_CLIENT_SECRET; cargo run 
+export GITHUB_CLIENT_ID=$YOUR_CLIENT_ID; export GITHUB_CLIENT_SECRET=$YOUR_CLIENT_SECRET; cargo run 
 ```
 
 After that follow the instructions in the console. If everything works as expected you should see an access token
